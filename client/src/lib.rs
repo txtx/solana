@@ -21,9 +21,6 @@ pub mod client_error {
 pub mod nonce_utils {
     pub use solana_rpc_client_nonce_utils::*;
 }
-pub mod pubsub_client {
-    pub use solana_pubsub_client::pubsub_client::*;
-}
 /// Communication with a Solana node over RPC.
 ///
 /// Software that interacts with the Solana blockchain, whether querying its

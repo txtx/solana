@@ -6216,7 +6216,6 @@ dependencies = [
  "rayon",
  "solana-connection-cache",
  "solana-measure",
- "solana-pubsub-client",
  "solana-quic-client",
  "solana-rpc-client",
  "solana-rpc-client-api",
