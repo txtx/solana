@@ -20,8 +20,10 @@ use {
     smallvec::SmallVec,
     solana_keypair::Keypair,
     solana_measure::measure::Measure,
-    solana_packet::{Meta, PACKET_DATA_SIZE},
-    solana_perf::packet::{BytesPacket, BytesPacketBatch, PacketBatch, PACKETS_PER_BATCH},
+    solana_packet::Meta,
+    solana_perf::packet::{
+        BytesPacket, BytesPacketBatch, PacketBatch, PACKETS_PER_BATCH, QUIC_MAX_STREAM_SIZE,
+    },
     solana_pubkey::Pubkey,
     solana_signature::Signature,
     solana_tls_utils::get_pubkey_from_tls_certificate,
@@ -853,6 +855,7 @@ async fn handle_connection<Q, C>(
         // Bytes values are small, so overall the array takes only 128 bytes, and the "cost" of
         // overallocating a few bytes is negligible compared to the cost of having to do multiple
         // read_chunks() calls.
+        // TODO(klykov): Do we want to increase the size of the array if the size of txs is increased?
         let mut chunks: [Bytes; 4] = array::from_fn(|_| Bytes::new());
 
         loop {
@@ -953,8 +956,8 @@ fn handle_chunks(
     let n_chunks = chunks.len();
     for chunk in chunks {
         accum.meta.size += chunk.len();
-        if accum.meta.size > PACKET_DATA_SIZE {
-            // The stream window size is set to PACKET_DATA_SIZE, so one individual chunk can
+        if accum.meta.size > QUIC_MAX_STREAM_SIZE {
+            // The stream window size is set to QUIC_MAX_STREAM_SIZE, so one individual chunk can
             // never exceed this size. A peer can send two chunks that together exceed the size
             // tho, in which case we report the error.
             stats.invalid_stream_size.fetch_add(1, Ordering::Relaxed);
@@ -1303,6 +1306,7 @@ pub mod test {
         quinn::{ApplicationClose, ConnectionError},
         solana_keypair::Keypair,
         solana_net_utils::sockets::bind_to_localhost_unique,
+        solana_packet::PACKET_DATA_SIZE,
         solana_signer::Signer,
         std::collections::HashMap,
         tokio::time::sleep,

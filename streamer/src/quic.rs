@@ -17,8 +17,10 @@ use {
     rustls::KeyLogFile,
     solana_keypair::Keypair,
     solana_packet::PACKET_DATA_SIZE,
-    solana_perf::packet::PacketBatch,
-    solana_quic_definitions::{NotifyKeyUpdate, QUIC_MAX_TIMEOUT},
+    solana_perf::packet::{PacketBatch, QUIC_MAX_STREAM_SIZE},
+    solana_quic_definitions::{
+        NotifyKeyUpdate, QUIC_MAX_TIMEOUT, QUIC_MAX_UNSTAKED_CONCURRENT_STREAMS,
+    },
     solana_tls_utils::{new_dummy_x509_certificate, tls_server_config_builder},
     std::{
         net::UdpSocket,
@@ -106,15 +108,12 @@ pub(crate) fn configure_server(
 
     let config = Arc::get_mut(&mut server_config.transport).unwrap();
 
-    // Set STREAM_MAX_DATA to fit at most 1 transaction.
-    // This should match the maximal TX size.
-    config.stream_receive_window((PACKET_DATA_SIZE as u32).into());
-    // set the receive window really small initially to prevent the fresh connections
-    // from slamming us with traffic.
-    config.receive_window((PACKET_DATA_SIZE as u32).into());
-    // disable uni_streams until handshake is complete
-    config.max_concurrent_uni_streams(0u32.into());
-    config.receive_window(CONNECTION_RECEIVE_WINDOW_BYTES);
+    // QUIC_MAX_CONCURRENT_STREAMS doubled, which was found to improve reliability
+    const MAX_CONCURRENT_UNI_STREAMS: u32 =
+        (QUIC_MAX_UNSTAKED_CONCURRENT_STREAMS.saturating_mul(2)) as u32;
+    config.max_concurrent_uni_streams(MAX_CONCURRENT_UNI_STREAMS.into());
+    config.stream_receive_window((QUIC_MAX_STREAM_SIZE as u32).into());
+    config.receive_window((QUIC_MAX_STREAM_SIZE as u32).into());
     let timeout = IdleTimeout::try_from(QUIC_MAX_TIMEOUT).unwrap();
     config.max_idle_timeout(Some(timeout));
 
