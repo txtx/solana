@@ -28,7 +28,9 @@ solana-clock = { workspace = true }
 solana-config-interface = { workspace = true, features = ["bincode"] }
 solana-genesis-config = { workspace = true }
 solana-native-token = { workspace = true }
-solana-pubkey = { workspace = true }
+solana-perf = { workspace = true }
+solana-program-runtime = { workspace = true }
+solana-pubkey = { workspace = true, features = ["sha2"] }
 solana-rent = { workspace = true }
 solana-sdk-ids = { workspace = true }
 solana-stake-interface = { workspace = true, features = ["bincode"] }
