@@ -17,8 +17,6 @@ use {
         state::{LoaderV4State, LoaderV4Status},
         DEPLOYMENT_COOLDOWN_IN_SLOTS,
     },
-    solana_log_collector::{ic_logger_msg, LogCollector},
-    solana_measure::measure::Measure,
     solana_perf::packet::QUIC_MAX_STREAM_SIZE,
     solana_program_runtime::{
         invoke_context::InvokeContext,
