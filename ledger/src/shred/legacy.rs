@@ -7,8 +7,6 @@ use {
         CodingShredHeader, DataShredHeader, Error, ShredCommonHeader, ShredVariant,
         SIZE_OF_CODING_SHRED_HEADERS, SIZE_OF_DATA_SHRED_HEADERS, SIZE_OF_SIGNATURE,
     },
-    assert_matches::debug_assert_matches,
-    solana_clock::Slot,
     solana_packet::PACKET_DATA_SIZE,
     solana_perf::packet::deserialize_from_with_limit,
     solana_signature::Signature,
@@ -115,7 +113,7 @@ impl<'a> Shred<'a> for ShredCode {
     const SIZE_OF_PAYLOAD: usize = shred_code::ShredCode::SIZE_OF_PAYLOAD;
     const SIZE_OF_HEADERS: usize = SIZE_OF_CODING_SHRED_HEADERS;
 
-    fn from_payload<T>(_payload: T) -> Result<Self, Error>
+    fn from_payload<T>(payload: T) -> Result<Self, Error>
     where
         Payload: From<T>,
     {
