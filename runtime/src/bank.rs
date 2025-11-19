@@ -112,7 +112,8 @@ use {
     solana_lattice_hash::lt_hash::LtHash,
     solana_measure::{measure::Measure, measure_time, measure_us},
     solana_message::{inner_instruction::InnerInstructions, AccountKeys, SanitizedMessage},
-    solana_packet::PACKET_DATA_SIZE,
+    solana_native_token::LAMPORTS_PER_SOL,
+    solana_perf::packet::QUIC_MAX_STREAM_SIZE,
     solana_precompile_error::PrecompileError,
     solana_program_runtime::{
         invoke_context::BuiltinFunctionWithContext,
@@ -4735,7 +4736,7 @@ impl Bank {
         let sanitized_tx = {
             let size =
                 bincode::serialized_size(&tx).map_err(|_| TransactionError::SanitizeFailure)?;
-            if size > PACKET_DATA_SIZE as u64 {
+            if size > QUIC_MAX_STREAM_SIZE as u64 {
                 return Err(TransactionError::SanitizeFailure);
             }
             let message_hash = if verification_mode == TransactionVerificationMode::FullVerification

@@ -575,15 +575,17 @@ mod tests {
     use {
         super::*,
         crate::banking_stage::tests::create_slow_genesis_config,
+        bytes::BytesMut,
         crossbeam_channel::{unbounded, Receiver},
         solana_hash::Hash,
         solana_keypair::Keypair,
         solana_ledger::genesis_utils::GenesisConfigInfo,
-        solana_message::{
-            v0, AccountMeta, AddressLookupTableAccount, Instruction, VersionedMessage,
+        solana_message::{v0, AddressLookupTableAccount, Instruction, VersionedMessage},
+        solana_packet::Meta,
+        solana_perf::packet::{
+            to_packet_batches, BytesPacket, BytesPacketBatch, PacketBatch, RecycledPacketBatch,
+            QUIC_MAX_STREAM_SIZE,
         },
-        solana_packet::{Meta, PACKET_DATA_SIZE},
-        solana_perf::packet::{to_packet_batches, Packet, PacketBatch, RecycledPacketBatch},
         solana_pubkey::Pubkey,
         solana_signer::Signer,
         solana_system_interface::instruction as system_instruction,
@@ -786,7 +788,7 @@ mod tests {
             setup_transaction_view_receive_and_buffer(receiver, bank_forks.clone());
 
         let packet_batches = Arc::new(vec![PacketBatch::from(RecycledPacketBatch::new(vec![
-            Packet::new([1u8; PACKET_DATA_SIZE], Meta::default()),
+            Packet::new([1u8; QUIC_MAX_STREAM_SIZE], Meta::default()),
         ]))]);
         sender.send(packet_batches).unwrap();
 

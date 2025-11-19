@@ -19,8 +19,13 @@ use {
     solana_measure::measure::Measure,
     solana_net_utils::token_bucket::TokenBucket,
     solana_packet::{Meta, PACKET_DATA_SIZE},
-    solana_perf::packet::{BytesPacket, PacketBatch},
+    solana_perf::packet::{
+        BytesPacket, BytesPacketBatch, PacketBatch, PACKETS_PER_BATCH, QUIC_MAX_STREAM_SIZE,
+    },
     solana_pubkey::Pubkey,
+    solana_quic_definitions::{
+        QUIC_MAX_STAKED_RECEIVE_WINDOW_RATIO, QUIC_MIN_STAKED_RECEIVE_WINDOW_RATIO,
+    },
     solana_signature::Signature,
     solana_tls_utils::get_pubkey_from_tls_certificate,
     solana_transaction_metrics_tracker::signature_if_should_track_packet,
@@ -429,8 +434,92 @@ pub(crate) fn update_open_connections_stat(
         stats
             .peak_open_unstaked_connections
             .fetch_max(connection_table.table_size(), Ordering::Relaxed);
+        // connection_table.close(
+        //     CONNECTION_CLOSE_CODE_EXCEED_MAX_STREAM_COUNT.into(),
+        //     CONNECTION_CLOSE_REASON_EXCEED_MAX_STREAM_COUNT,
+        // );
+
+        // stats
+        //     .connection_add_failed_invalid_stream_count
+        //     .fetch_add(1, Ordering::Relaxed);
+        // Err(ConnectionHandlerError::MaxStreamError)
     }
 }
+
+// async fn prune_unstaked_connections_and_add_new_connection(
+//     client_connection_tracker: ClientConnectionTracker,
+//     connection: Connection,
+//     connection_table: Arc<Mutex<ConnectionTable>>,
+//     max_connections: usize,
+//     params: &NewConnectionHandlerParams,
+//     wait_for_chunk_timeout: Duration,
+//     stream_load_ema: Arc<StakedStreamLoadEMA>,
+// ) -> Result<(), ConnectionHandlerError> {
+//     let stats = params.stats.clone();
+//     if max_connections > 0 {
+//         let connection_table_clone = connection_table.clone();
+//         let mut connection_table = connection_table.lock().await;
+//         prune_unstaked_connection_table(&mut connection_table, max_connections, stats);
+//         handle_and_cache_new_connection(
+//             client_connection_tracker,
+//             connection,
+//             connection_table,
+//             connection_table_clone,
+//             params,
+//             wait_for_chunk_timeout,
+//             stream_load_ema,
+//         )
+//     } else {
+//         connection.close(
+//             CONNECTION_CLOSE_CODE_DISALLOWED.into(),
+//             CONNECTION_CLOSE_REASON_DISALLOWED,
+//         );
+//         Err(ConnectionHandlerError::ConnectionAddError)
+//     }
+// }
+
+/// Calculate the ratio for per connection receive window from a staked peer
+// fn compute_receive_window_ratio_for_staked_node(max_stake: u64, min_stake: u64, stake: u64) -> u64 {
+//     // Testing shows the maximum througput from a connection is achieved at receive_window =
+//     // QUIC_MAX_STREAM_SIZE * 10. Beyond that, there is not much gain. We linearly map the
+//     // stake to the ratio range from QUIC_MIN_STAKED_RECEIVE_WINDOW_RATIO to
+//     // QUIC_MAX_STAKED_RECEIVE_WINDOW_RATIO. Where the linear algebra of finding the ratio 'r'
+//     // for stake 's' is,
+//     // r(s) = a * s + b. Given the max_stake, min_stake, max_ratio, min_ratio, we can find
+//     // a and b.
+
+//     if stake > max_stake {
+//         return QUIC_MAX_STAKED_RECEIVE_WINDOW_RATIO;
+//     }
+
+//     let max_ratio = QUIC_MAX_STAKED_RECEIVE_WINDOW_RATIO;
+//     let min_ratio = QUIC_MIN_STAKED_RECEIVE_WINDOW_RATIO;
+//     if max_stake > min_stake {
+//         let a = (max_ratio - min_ratio) as f64 / (max_stake - min_stake) as f64;
+//         let b = max_ratio as f64 - ((max_stake as f64) * a);
+//         let ratio = (a * stake as f64) + b;
+//         ratio.round() as u64
+//     } else {
+//         QUIC_MAX_STAKED_RECEIVE_WINDOW_RATIO
+//     }
+// }
+
+// fn compute_recieve_window(
+//     max_stake: u64,
+//     min_stake: u64,
+//     peer_type: ConnectionPeerType,
+// ) -> Result<VarInt, VarIntBoundsExceeded> {
+//     match peer_type {
+//         ConnectionPeerType::Unstaked => {
+//             VarInt::from_u64(QUIC_MAX_STREAM_SIZE as u64 * QUIC_UNSTAKED_RECEIVE_WINDOW_RATIO)
+//         }
+//         ConnectionPeerType::Staked(peer_stake) => {
+//             let ratio =
+//                 compute_receive_window_ratio_for_staked_node(max_stake, min_stake, peer_stake);
+//             VarInt::from_u64(QUIC_MAX_STREAM_SIZE as u64 * ratio)
+//         }
+//     }
+// }
 
 #[allow(clippy::too_many_arguments)]
 async fn setup_connection<Q, C>(
@@ -640,6 +729,7 @@ async fn handle_connection<Q, C>(
         // Bytes values are small, so overall the array takes only 128 bytes, and the "cost" of
         // overallocating a few bytes is negligible compared to the cost of having to do multiple
         // read_chunks() calls.
+        // TODO(klykov): Do we want to increase the size of the array if the size of txs is increased?
         let mut chunks: [Bytes; 4] = array::from_fn(|_| Bytes::new());
 
         loop {
@@ -740,8 +830,8 @@ fn handle_chunks(
     let n_chunks = chunks.len();
     for chunk in chunks {
         accum.meta.size += chunk.len();
-        if accum.meta.size > PACKET_DATA_SIZE {
-            // The stream window size is set to PACKET_DATA_SIZE, so one individual chunk can
+        if accum.meta.size > QUIC_MAX_STREAM_SIZE {
+            // The stream window size is set to QUIC_MAX_STREAM_SIZE, so one individual chunk can
             // never exceed this size. A peer can send two chunks that together exceed the size
             // tho, in which case we report the error.
             stats.invalid_stream_size.fetch_add(1, Ordering::Relaxed);
@@ -1164,7 +1254,7 @@ pub mod test {
             // Send enough data to create more than 1 chunks.
             // The first will try to open the connection (which should fail).
             // The following chunks will enable the detection of connection failure.
-            let data = vec![1u8; PACKET_DATA_SIZE * 2];
+            let data = vec![1u8; QUIC_MAX_STREAM_SIZE * 2];
             s2.write_all(&data)
                 .await
                 .expect_err("shouldn't be able to open 2 connections");
@@ -1184,7 +1274,7 @@ pub mod test {
         let conn1 = Arc::new(make_client_endpoint(&server_address, client_keypair).await);
 
         // Send a full size packet with single byte writes.
-        let num_bytes = PACKET_DATA_SIZE;
+        let num_bytes = QUIC_MAX_STREAM_SIZE;
         let num_expected_packets = 1;
         let mut s1 = conn1.open_uni().await.unwrap();
         for _ in 0..num_bytes {
@@ -1249,7 +1339,7 @@ pub mod test {
 
         // Send a full size packet with single byte writes.
         if let Ok(mut s1) = conn1.open_uni().await {
-            for _ in 0..PACKET_DATA_SIZE {
+            for _ in 0..QUIC_MAX_STREAM_SIZE {
                 // Ignoring any errors here. s1.finish() will test the error condition
                 s1.write_all(&[0u8]).await.unwrap_or_default();
             }
@@ -1994,7 +2084,7 @@ pub mod test {
 
         let mut send_stream = client_connection.open_uni().await.unwrap();
         send_stream
-            .write_all(&[42; PACKET_DATA_SIZE + 1])
+            .write_all(&[42; QUIC_MAX_STREAM_SIZE + 1])
             .await
             .unwrap();
         match client_connection.closed().await {
