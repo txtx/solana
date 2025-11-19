@@ -7487,7 +7487,7 @@ dependencies = [
  "solana-last-restart-slot",
  "solana-loader-v3-interface",
  "solana-loader-v4-interface",
- "solana-packet",
+ "solana-perf",
  "solana-program",
  "solana-program-entrypoint",
  "solana-program-runtime",

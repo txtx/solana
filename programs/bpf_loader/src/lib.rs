@@ -3,6 +3,7 @@
 
 #[cfg(feature = "svm-internal")]
 use qualifier_attr::qualifiers;
+use solana_perf::packet::QUIC_MAX_STREAM_SIZE;
 use {
     solana_bincode::limited_deserialize,
     solana_clock::Slot,
@@ -443,7 +444,7 @@ fn process_loader_upgradeable_instruction(
     let instruction_data = instruction_context.get_instruction_data();
     let program_id = instruction_context.get_program_key()?;
 
-    match limited_deserialize(instruction_data, solana_packet::PACKET_DATA_SIZE as u64)? {
+    match limited_deserialize(instruction_data, QUIC_MAX_STREAM_SIZE as u64)? {
         UpgradeableLoaderInstruction::InitializeBuffer => {
             instruction_context.check_number_of_instruction_accounts(2)?;
             let mut buffer = instruction_context.try_borrow_instruction_account(0)?;
