@@ -454,7 +454,7 @@ macro_rules! impl_merkle_shred {
     };
 }
 
-use impl_merkle_shred;
+use {impl_merkle_shred, solana_packet::PACKET_DATA_SIZE};
 
 impl<'a> ShredTrait<'a> for ShredData {
     type SignedData = Hash;
@@ -482,7 +482,7 @@ impl<'a> ShredTrait<'a> for ShredData {
         }
         payload.truncate(Self::SIZE_OF_PAYLOAD);
         let (common_header, data_header): (ShredCommonHeader, _) =
-            deserialize_from_with_limit(&payload[..])?;
+            deserialize_from_with_limit(&payload[..], PACKET_DATA_SIZE)?;
         if !matches!(common_header.shred_variant, ShredVariant::MerkleData { .. }) {
             return Err(Error::InvalidShredVariant);
         }
@@ -533,7 +533,7 @@ impl<'a> ShredTrait<'a> for ShredCode {
     {
         let mut payload = Payload::from(payload);
         let (common_header, coding_header): (ShredCommonHeader, _) =
-            deserialize_from_with_limit(&payload[..])?;
+            deserialize_from_with_limit(&payload[..], PACKET_DATA_SIZE)?;
         if !matches!(common_header.shred_variant, ShredVariant::MerkleCode { .. }) {
             return Err(Error::InvalidShredVariant);
         }
@@ -776,7 +776,7 @@ pub(super) fn recover(
                         return Err(Error::InvalidRecoveredShred);
                     };
                     let (common_header, data_header) =
-                        deserialize_from_with_limit(&shred.payload[..])?;
+                        deserialize_from_with_limit(&shred.payload[..], PACKET_DATA_SIZE)?;
                     if shred.common_header != common_header {
                         return Err(Error::InvalidRecoveredShred);
                     }
